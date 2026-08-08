@@ -1,0 +1,32 @@
+sharklet/
+├── .env.example                    # Environment variables template
+├── .gitignore                      # Git ignore file
+├── Cargo.toml                      # Dependencies
+├── Cargo.lock                      # Lock file
+├── run_bot.sh                      # Watchdog script
+├── README.md                       # Documentation
+│
+├── config/                         # Configuration files
+│   ├── addresses.toml              # ALL token addresses (one place)
+│   ├── bot.toml                    # ALL bot settings (gas, risk, loop)
+│   └── chains.toml                 # RPC endpoints, chain IDs
+│
+├── src/                            # Source code
+│   ├── main.rs                     # Main entry point ✅ (you have this)
+│   ├── scanner.rs                  # Price scanner
+│   ├── executor.rs                 # Flash loan executor (with loop)
+│   ├── simulation.rs               # Pre-flight simulation
+│   ├── risk_engine.rs              # Risk engine (enhanced)
+│   ├── gas_manager.rs              # Gas reinvestment (NEW)
+│   ├── profit_calc.rs              # Profit calculator
+│   ├── rpc_manager.rs              # RPC manager
+│   ├── logger.rs                   # SQLite logging
+│   ├── dex_registry.rs             # DEX pair resolver
+│   └── price_oracle.rs             # Chainlink price feed
+│
+├── dashboard/                      # Web dashboard
+│   ├── index.html                  # Dashboard UI
+│   └── dashboard.py                # Python server
+│
+└── logs/                           # Log files (auto-created)
+    └── sharklet.log

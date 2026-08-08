@@ -1,14 +1,22 @@
-*.tar
-*.tar.*
-*.jar
-*.exe
-*.msi
-*.deb
-*.zip
-*.tgz
-*.log
-*.log.*
-*.sig
+# Rust
+target/
+Cargo.lock
 
-pkg/
-src/
+# Environment
+.env
+*.env
+
+# Database
+*.db
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
