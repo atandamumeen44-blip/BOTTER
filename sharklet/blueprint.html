@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>🦈 Sharklet v2 – Ultra‑Realistic Flash‑Arb Hunter | Blueprint</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0d10; color: #d4d4d4;
+            font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+            overflow-x: hidden; scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+        }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0a0d10; }
+        ::-webkit-scrollbar-thumb { background: #2a3038; border-radius: 2px; }
+        .mobile-nav { display: none; position: fixed; top: 0; width: 100%; background: rgba(10,13,16,0.95); backdrop-filter: blur(20px); border-bottom: 1px solid #1a1f26; z-index: 100; padding: 0.7rem 1.2rem; justify-content: space-between; align-items: center; }
+        .hamburger { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; padding: 0.3rem; }
+        .mobile-menu { display: none; position: fixed; top: 52px; left: 0; width: 100%; background: rgba(10,13,16,0.98); backdrop-filter: blur(20px); border-bottom: 1px solid #1a1f26; z-index: 99; flex-direction: column; padding: 1rem 1.2rem; gap: 0.8rem; }
+        .mobile-menu.active { display: flex; }
+        .mobile-menu a { color: #aaa; text-decoration: none; font-size: 0.9rem; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; padding: 0.5rem 0; border-bottom: 1px solid #1a1f26; }
+        .desktop-nav { position: fixed; top: 0; width: 100%; background: rgba(10,13,16,0.9); backdrop-filter: blur(20px); border-bottom: 1px solid #1a1f26; z-index: 100; padding: 0.8rem 2rem; display: flex; align-items: center; justify-content: space-between; }
+        .nav-logo { font-size: clamp(1rem,2.5vw,1.3rem); font-weight: 700; background: linear-gradient(135deg,#00f2fe,#4facfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; white-space: nowrap; }
+        .nav-links { display: flex; gap: clamp(0.8rem,2vw,2rem); list-style: none; flex-wrap: wrap; justify-content: flex-end; }
+        .nav-links a { color: #888; text-decoration: none; font-size: clamp(0.7rem,1.2vw,0.85rem); font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; transition: color 0.2s; white-space: nowrap; }
+        .nav-links a:hover { color: #4facfe; }
+        .section { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 5rem 1rem 3rem; border-bottom: 1px solid #11151a; }
+        .container { max-width: 1000px; width: 100%; }
+        .hero { text-align: center; }
+        .hero h1 { font-size: clamp(2rem,6vw,4rem); font-weight: 800; background: linear-gradient(135deg,#00f2fe,#4facfe,#7c4dff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.15; margin-bottom: 1rem; }
+        .hero .subtitle { font-size: clamp(0.9rem,2vw,1.3rem); color: #777; max-width: 650px; margin: 0 auto 1.5rem; line-height: 1.6; padding: 0 0.5rem; }
+        .badge-row { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+        .badge { background: #11161c; border: 1px solid #1e2630; padding: 0.4rem 0.9rem; border-radius: 30px; font-size: clamp(0.65rem,1.2vw,0.8rem); font-weight: 600; color: #aaa; letter-spacing: 0.3px; white-space: nowrap; }
+        .badge.highlight { border-color: #4facfe; color: #4facfe; }
+        .section-title { font-size: clamp(1.5rem,4vw,2.5rem); font-weight: 700; margin-bottom: 0.5rem; letter-spacing: -0.5px; text-align: center; }
+        .section-subtitle { color: #666; margin-bottom: 2rem; font-size: clamp(0.8rem,1.5vw,1.1rem); text-align: center; padding: 0 0.5rem; }
+        .gradient-text { background: linear-gradient(135deg,#00f2fe,#4facfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .arch-layers { display: flex; flex-direction: column; gap: 0.6rem; }
+        .arch-layer { background: #0d1117; border: 1px solid #1a2028; border-radius: 14px; padding: clamp(1rem,2vw,1.5rem) clamp(1rem,2vw,2rem); display: flex; align-items: flex-start; gap: clamp(0.8rem,2vw,2rem); transition: border-color 0.3s; flex-wrap: wrap; }
+        .arch-layer.built { border-color: #1a3a1a; background: #0d140d; }
+        .layer-num { font-size: clamp(1.5rem,3vw,2rem); font-weight: 800; color: #1a2430; min-width: 40px; flex-shrink: 0; }
+        .layer-content { flex: 1; min-width: 180px; }
+        .layer-content h3 { font-size: clamp(0.9rem,1.5vw,1.2rem); margin-bottom: 0.3rem; color: #eee; }
+        .layer-content p { font-size: clamp(0.7rem,1.2vw,0.85rem); color: #777; line-height: 1.5; }
+        .layer-status { font-size: clamp(0.6rem,1vw,0.7rem); font-weight: 700; padding: 0.2rem 0.7rem; border-radius: 12px; flex-shrink: 0; align-self: center; }
+        .layer-status.built-status { background: #1a2f1a; color: #4caf50; }
+        .layer-tech { font-size: clamp(0.65rem,1vw,0.75rem); color: #4facfe; font-weight: 600; letter-spacing: 0.3px; white-space: nowrap; flex-shrink: 0; align-self: center; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 1rem; }
+        .card { background: #0d1117; border: 1px solid #1a2028; border-radius: 16px; padding: clamp(1.2rem,2vw,2rem); transition: border-color 0.3s; }
+        .card:active { border-color: #2a3a50; }
+        .card-icon { font-size: clamp(1.5rem,3vw,2rem); margin-bottom: 0.8rem; }
+        .card h4 { font-size: clamp(0.9rem,1.3vw,1.1rem); margin-bottom: 0.4rem; color: #eee; }
+        .card p { font-size: clamp(0.7rem,1.1vw,0.85rem); color: #777; line-height: 1.5; }
+        .card-badge { display: inline-block; margin-top: 0.8rem; font-size: 0.65rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 10px; }
+        .card-badge.done { background: #1a2f1a; color: #4caf50; }
+        .dash-example { background: #0d1117; border: 1px solid #1a2028; border-radius: 12px; padding: 1.5rem; font-family: 'Courier New', monospace; font-size: 0.85rem; line-height: 1.6; color: #ccc; overflow-x: auto; white-space: pre; }
+        .phases { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center; }
+        .phase-card { background: #0d1117; border: 1px solid #1a2028; border-radius: 14px; padding: 1.5rem; min-width: 200px; flex: 1; text-align: center; }
+        .phase-num { font-size: 2.5rem; font-weight: 800; color: #1a2430; }
+        .phase-card h4 { color: #eee; margin: 0.5rem 0; }
+        .phase-card p { font-size: 0.8rem; color: #777; }
+        footer { text-align: center; padding: 2rem 1rem; color: #444; font-size: clamp(0.7rem,1.2vw,0.8rem); }
+        .fade-in { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
+        .fade-in.visible { opacity: 1; transform: translateY(0); }
+        @media (max-width: 768px) {
+            .desktop-nav { display: none; } .mobile-nav { display: flex; }
+            .section { padding-top: 4rem; min-height: auto; padding-bottom: 2.5rem; }
+            .arch-layer { flex-direction: column; gap: 0.5rem; } .layer-tech { align-self: flex-start; }
+            .card-grid { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 480px) { .card-grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="mobile-nav"><div class="nav-logo">🦈 Sharklet v2</div><button class="hamburger" onclick="toggleMobileMenu()">☰</button></div>
+    <div class="mobile-menu" id="mobileMenu">
+        <a href="#vision" onclick="closeMobileMenu()">Vision</a><a href="#architecture" onclick="closeMobileMenu()">Architecture</a><a href="#simulation" onclick="closeMobileMenu()">Simulation</a><a href="#modules" onclick="closeMobileMenu()">Modules</a><a href="#safety" onclick="closeMobileMenu()">Safety</a><a href="#phases" onclick="closeMobileMenu()">Phases</a><a href="#dashboard" onclick="closeMobileMenu()">Dashboard</a><a href="#deploy" onclick="closeMobileMenu()">Deploy</a>
+    </div>
+    <nav class="desktop-nav"><div class="nav-logo">🦈 Sharklet v2 – Ultra‑Realistic</div><ul class="nav-links"><li><a href="#vision">Vision</a></li><li><a href="#architecture">Architecture</a></li><li><a href="#simulation">Simulation</a></li><li><a href="#modules">Modules</a></li><li><a href="#safety">Safety</a></li><li><a href="#phases">Phases</a></li><li><a href="#dashboard">Dashboard</a></li><li><a href="#deploy">Deploy</a></li></ul></nav>
+
+    <section class="section hero" id="vision"><div class="container fade-in"><h1>🦈 Sharklet v2</h1><p class="subtitle">Ultra‑realistic flash‑arb hunter. 99.9% simulation accuracy. Mempool‑aware, adaptive profit, multi‑RPC, self‑funding. Zero wasted gas. Zero AI—just raw speed and math.</p><div class="badge-row"><span class="badge highlight">Rust</span><span class="badge">Solidity</span><span class="badge">Polygon</span><span class="badge">Aave V3</span><span class="badge">Flashbots</span><span class="badge">99.9% Sim</span><span class="badge">$1–$∞ adaptive profit</span><span class="badge">Self‑funding</span></div></div></section>
+
+    <section class="section" id="architecture"><div class="container fade-in"><h2 class="section-title">🏗️ <span class="gradient-text">Execution Pipeline (Cold, Hard, Fast)</span></h2><p class="section-subtitle">Every check, every validation – 99.9% realism before a single wei is spent.</p><div class="arch-layers">
+        <div class="arch-layer"><div class="layer-num">1</div><div class="layer-content"><h3>Polygon Blockchain + Mempool</h3><p>Uniswap V2, SushiSwap, Balancer pools. Mempool monitor watches pending swaps that might move prices.</p></div><div class="layer-tech">EVM · Mempool</div></div>
+        <div class="arch-layer"><div class="layer-num">2</div><div class="layer-content"><h3>Multi‑RPC Manager</h3><p>Ranks endpoints by latency & success rate (Alchemy → QuickNode → Public → Ankr). Rotates on failure.</p></div><div class="layer-tech">RPC Scoreboard</div></div>
+        <div class="arch-layer"><div class="layer-num">3</div><div class="layer-content"><h3>Scanner + Mempool Monitor</h3><p>Fetches reserves every block/2‑3s. Simultaneously monitors mempool for large pending swaps that signal upcoming arb opportunities.</p></div><div class="layer-tech">ethers-rs</div></div>
+        <div class="arch-layer"><div class="layer-num">4</div><div class="layer-content"><h3>Opportunity Queue + Ranking</h3><p>Multiple opportunities scored by profit, confidence, gas risk. Best ones executed first.</p></div><div class="layer-tech">Priority Queue</div></div>
+        <div class="arch-layer"><div class="layer-num">5</div><div class="layer-content"><h3>Profit Calculator + Liquidity Analyzer</h3><p>Computes gross profit, flash fee, gas, slippage (using pool depth), safety margin. Determines optimal trade size without exceeding slippage cap.</p></div><div class="layer-tech">Dynamic Sizing</div></div>
+        <div class="arch-layer"><div class="layer-num">6</div><div class="layer-content"><h3>Ultra‑Realistic Simulator (eth_call)</h3><p>Simulates the entire flash‑loan transaction locally. Checks exact return values, gas usage, and potential reverts. Only passes if profit > adaptive minimum.</p></div><div class="layer-tech">99.9% accuracy</div></div>
+        <div class="arch-layer"><div class="layer-num">7</div><div class="layer-content"><h3>Circuit Breaker + Risk Gate</h3><p>Stops trading after 3 consecutive losses or if gas exceeds ceiling. Pauses 10 min, then retries.</p></div><div class="layer-tech">Self‑healing</div></div>
+        <div class="arch-layer"><div class="layer-num">8</div><div class="layer-content"><h3>Flash‑Loan Executor + Loop</h3><p>Builds, signs, and sends transaction via Flashbots Protect. After success, re‑checks spread and repeats until it closes or max repeats hit.</p></div><div class="layer-tech">Loop until dry</div></div>
+        <div class="arch-layer"><div class="layer-num">9</div><div class="layer-content"><h3>Logger, Dashboard & Telegram</h3><p>Every trade logged to SQLite. Dashboard shows live P&L, wallet, gas, RPC health, trade replay. Telegram alerts for key events.</p></div><div class="layer-tech">SQLite · warp · TDLib</div></div>
+    </div></div></section>
+
+    <section class="section" id="simulation"><div class="container fade-in"><h2 class="section-title">🎯 <span class="gradient-text">The 99.9% Simulation Promise</span></h2><p class="section-subtitle">How we guarantee near‑zero wasted gas.</p>
+        <div class="dash-example">
+<span style="color:#4facfe;">Pre‑Flight Checklist (every trade, every time)</span>
+
+1. <span style="color:#ffc107;">Mempool check</span> – is a large swap about to land that will kill this spread? If yes, skip.
+2. <span style="color:#ffc107;">Multi‑RPC consensus</span> – fetch reserves from 2 different RPCs. If they disagree by >0.05%, skip.
+3. <span style="color:#ffc107;">Liquidity deep enough?</span> – pool TVL must be ≥ $100k. Compute exact slippage from AMM formula.
+4. <span style="color:#ffc107;">Gas ceiling</span> – if current base fee + priority fee > 500 Gwei, skip.
+5. <span style="color:#ffc107;">Dynamic profit threshold</span> – minimum profit adapts to wallet balance (see Safety section).
+6. <span style="color:#ffc107;">Safety margin</span> – an extra $0.30 is subtracted from net profit before decision.
+7. <span style="color:#ffc107;">eth_call simulation</span> – the entire flash‑loan transaction is executed locally. We read the actual USDC balance change. If it's less than expected (or negative), skip.
+8. <span style="color:#ffc107;">Only then</span> – sign and send via Flashbots Protect.
+
+<span style="color:#4caf50;">Result:</span> Failed transactions drop to near zero. Gas budget lasts 10x longer.
+        </div>
+    </div></section>
+
+    <section class="section" id="modules"><div class="container fade-in"><h2 class="section-title">🧩 <span class="gradient-text">Module Inventory</span></h2><p class="section-subtitle">Every piece of the machine.</p><div class="card-grid">
+        <div class="card"><div class="card-icon">🔍</div><h4>Scanner</h4><p>Reads reserves from multiple DEXs. Emits raw price data.</p></div>
+        <div class="card"><div class="card-icon">📡</div><h4>Mempool Monitor</h4><p>Watches pending transactions for large swaps. Feeds early signals to the scanner.</p></div>
+        <div class="card"><div class="card-icon">📊</div><h4>ProfitCalc + Liquidity Analyzer</h4><p>Computes net profit with safety margin. Sizes trades based on pool depth to stay under max slippage.</p></div>
+        <div class="card"><div class="card-icon">🧪</div><h4>Simulator (eth_call)</h4><p>Dry‑runs the entire flash‑loan transaction. Returns exact profit before sending.</p></div>
+        <div class="card"><div class="card-icon">⚡</div><h4>Executor + Loop</h4><p>Sends via Flashbots. Re‑executes while spread persists.</p></div>
+        <div class="card"><div class="card-icon">🛡️</div><h4>Circuit Breaker</h4><p>3 consecutive losses → pause 10 min. Protects capital.</p></div>
+        <div class="card"><div class="card-icon">📝</div><h4>Logger</h4><p>Stores every trade: timestamp, pair, DEX, gas, profit, tx hash, skip reason, replay data.</p></div>
+        <div class="card"><div class="card-icon">🖥️</div><h4>Dashboard + Replay</h4><p>Live stats, trade log, wallet, gas, RPC health, and step‑by‑step trade replay.</p></div>
+        <div class="card"><div class="card-icon">📱</div><h4>Telegram Alerts</h4><p>Notifies on executed trade, circuit breaker trip, or profit milestone.</p></div>
+        <div class="card"><div class="card-icon">⚙️</div><h4>RPC Scoreboard</h4><p>Measures latency & success rate of all endpoints. Auto‑selects fastest.</p></div>
+        <div class="card"><div class="card-icon">❤️</div><h4>Health Monitor</h4><p>CPU, RAM, block height, queue size, scanner delay. Alerts if something stalls.</p></div>
+    </div></div></section>
+
+    <section class="section" id="safety"><div class="container fade-in"><h2 class="section-title">🛡️ <span class="gradient-text">Safety & Adaptive Profit</span></h2><p class="section-subtitle">The bot protects itself while scaling with your wallet.</p>
+        <div class="dash-example">
+<span style="color:#4caf50;">Adaptive Minimum Profit Threshold</span>
+
+Wallet &lt; $100      → Min Profit = $1.00
+Wallet $100‑$500    → Min Profit = $2.00
+Wallet $500‑$2,000  → Min Profit = $5.00
+Wallet $2,000‑$10k  → Min Profit = $10.00
+Wallet &gt; $10k       → Min Profit = $25.00
+
+<span style="color:#ffc107;">Other Safety Rules:</span>
+• Gas ceiling: skip if gas_price &gt; 500 Gwei
+• Slippage cap: never exceed 0.3% estimated slippage
+• Circuit breaker: 3 consecutive losses → pause 10 min
+• Multi‑RPC: always fetch from at least 2 endpoints; skip on large disagreement
+• Profit split: 70% withdrawable, 20% trading reserve, 10% emergency reserve
+        </div>
+    </div></section>
+
+    <section class="section" id="phases"><div class="container fade-in"><h2 class="section-title">📆 <span class="gradient-text">Phased Rollout</span></h2><p class="section-subtitle">Start small, prove it, then scale.</p>
+        <div class="phases">
+            <div class="phase-card"><div class="phase-num">1</div><h4>Core Hunter</h4><p>Scanner<br>ProfitCalc<br>Simulator<br>Executor<br>Loop<br>Circuit Breaker<br>Basic Dashboard</p></div>
+            <div class="phase-card"><div class="phase-num">2</div><h4>Enhanced Safety</h4><p>Mempool Monitor<br>RPC Scoreboard<br>Dynamic Profit Threshold<br>Trade Replay<br>Telegram Alerts<br>Health Monitor</p></div>
+            <div class="phase-card"><div class="phase-num">3</div><h4>Scaling & Intelligence</h4><p>Multi‑chain<br>Advanced routing<br>Historical analytics<br>CatBoost model (optional)<br>Auto‑optimization</p></div>
+        </div>
+        <p style="text-align:center;margin-top:1.5rem;color:#666;">Phase 1 gets you profitable with zero wasted gas. Phase 2 makes it bulletproof. Phase 3 scales to the moon.</p>
+    </div></section>
+
+    <section class="section" id="dashboard"><div class="container fade-in"><h2 class="section-title">🖥️ <span class="gradient-text">Command Center Dashboard</span></h2><p class="section-subtitle">Clean, real‑time, everything you need.</p>
+        <div class="dash-example">
+╔══════════════════════════════════════════╗
+║  🦈 Sharklet v2              🟢 Running
+╠══════════════════════════════════════════╣
+║  Wallet: $27.41   Today: +$14.22   Total: +$613.92
+║  Gas: 31 Gwei (Base: 28 | Tip: 3)
+║  Scanner: Running  Executor: Idle  Queue: 2
+╠══════════════════════════════════════════╣
+║  Last Trade:  USDC→WETH  1.42%  +$3.16
+║  Simulation: ✅ Passed   Gas used: 287k
+║  Replay: [Scanner→Calc→Sim→Exec→Profit]
+╠══════════════════════════════════════════╣
+║  RPC Scoreboard
+║  Alchemy     🟢 81ms  99.8%  #1
+║  QuickNode   🟢 112ms 98.4%  #2
+║  Public      🟡 165ms 96.0%  #3
+╠══════════════════════════════════════════╣
+║  Trade Log (last 20)
+║  #  Time  Pair   Spread  Net   Status
+║  1  14:32 USDC/ETH 1.2% +$2.10 ✅
+║  2  14:28 WBTC/USDC 0.9% +$1.88 ✅
+║  3  14:25 LINK/WETH 0.5% $0.00 ⏭️ (slippage)
+╚══════════════════════════════════════════╝
+        </div>
+        <p style="text-align:center;margin-top:1rem;color:#888;">Static HTML + JS, fetching from the Rust HTTP API. Lightweight and instant.</p>
+    </div></section>
+
+    <section class="section" id="deploy"><div class="container fade-in"><h2 class="section-title">🚀 <span class="gradient-text">Deployment (Oracle Cloud Free)</span></h2><p class="section-subtitle">One VM, one binary, forever free.</p>
+        <div class="card-grid">
+            <div class="card"><h4>1. Deploy Flash‑Loan Contract</h4><p>One‑time on Polygon (~$0.50 gas). Aave V3 receiver with swap logic.</p></div>
+            <div class="card"><h4>2. Compile Rust Binary</h4><p>`cargo build --release`. Upload to Oracle VM.</p></div>
+            <div class="card"><h4>3. Set Environment Variables</h4><p>PRIVATE_KEY, RPC_URLS, CONTRACT_ADDRESS, MIN_PROFIT, etc.</p></div>
+            <div class="card"><h4>4. Run & Monitor</h4><p>`./sharklet` starts hunting. Dashboard on port 8080. Telegram alerts active.</p></div>
+        </div>
+        <p style="text-align:center;margin-top:1.5rem;color:#4facfe;">🦈 From $1.46 gas to self‑funding profit. No AI, no bloat—just ruthless, realistic execution.</p>
+    </section>
+    <footer><p>🦈 Sharklet Blueprint v2 · 99.9% simulation accuracy · Adaptive profit · Mempool‑aware · Self‑healing · Built for the hunt</p></footer>
+
+    <script>
+        function toggleMobileMenu(){document.getElementById('mobileMenu').classList.toggle('active');}
+        function closeMobileMenu(){document.getElementById('mobileMenu').classList.remove('active');}
+        document.querySelectorAll('.mobile-menu a').forEach(l=>l.addEventListener('click',closeMobileMenu));
+        const els=document.querySelectorAll('.fade-in');
+        const obs=new IntersectionObserver((e)=>{e.forEach(en=>{if(en.isIntersecting)en.target.classList.add('visible');})},{threshold:0.15});
+        els.forEach(el=>obs.observe(el));
+        window.addEventListener('load',()=>{els.forEach(el=>{if(el.getBoundingClientRect().top<window.innerHeight)el.classList.add('visible');});});
+    </script>
+</body>
+</html>

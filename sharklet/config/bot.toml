@@ -1,0 +1,20 @@
+# Risk and execution parameters
+
+max_daily_loss_usd = 500.0
+max_hourly_loss_usd = 200.0
+max_trade_size_usd = 100000.0
+max_flash_loan_usd = 100000.0
+max_gas_spent_today_usd = 50.0
+max_consecutive_failures = 5
+wallet_min_balance_usd = 1.0
+min_rpc_confidence = 0.80
+circuit_breaker_pause_secs = 300
+failure_reset_window_secs = 3600
+
+adaptive_limits = true
+adaptive_tiers = [
+    [100.0, 2000.0, 2000.0, 5.0],
+    [1000.0, 10000.0, 10000.0, 20.0],
+    [10000.0, 50000.0, 50000.0, 100.0],
+    [100000.0, 250000.0, 250000.0, 500.0],
+]

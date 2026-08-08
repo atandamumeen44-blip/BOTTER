@@ -1,0 +1,56 @@
+<!-- dashboard/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🦈 Sharklet Dashboard</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { background: #0a0d10; color: #d4d4d4; font-family: 'Segoe UI', monospace; padding: 2rem; }
+        .card { background: #1a1d23; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+        h1 { color: #4facfe; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #2a2d35; }
+        th { color: #6e7681; }
+        .profit { color: #2ecc71; } .loss { color: #e74c3c; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; background: #2a2d35; }
+        .badge-win { background: #2ecc71; color: #0a0d10; } .badge-loss { background: #e74c3c; color: #fff; }
+        #summary { display: flex; gap: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>🦈 Sharklet Dashboard</h1>
+    <div id="summary"></div>
+    <div class="card">
+        <h3>Recent Trades</h3>
+        <table id="trades"><thead><tr><th>Time</th><th>Pair</th><th>Size</th><th>Net</th><th>Status</th></tr></thead><tbody></tbody></table>
+    </div>
+    <script>
+        const API = window.location.origin.replace(/:\d+/, ':5000'); // assume Python server on port 5000
+        async function load() {
+            const summary = await fetch(`${API}/api/summary`).then(r => r.json());
+            document.getElementById('summary').innerHTML =
+                `<div class="card"><strong>Total Profit</strong><br><span class="profit">$${summary.total_profit.toFixed(2)}</span></div>
+                 <div class="card"><strong>Trades</strong><br>${summary.total_trades}</div>
+                 <div class="card"><strong>Win Rate</strong><br>${summary.win_rate}%</div>`;
+            const trades = await fetch(`${API}/api/trades`).then(r => r.json());
+            const tbody = document.querySelector('#trades tbody');
+            tbody.innerHTML = '';
+            trades.forEach(t => {
+                const net = t.realized_net_usd ? t.realized_net_usd.toFixed(2) : '--';
+                const cls = t.realized_net_usd >= 0 ? 'profit' : 'loss';
+                const ts = new Date(t.ts * 1000).toLocaleString();
+                tbody.innerHTML += `<tr>
+                    <td>${ts}</td>
+                    <td>${t.pair_label}</td>
+                    <td>$${t.size_usd.toFixed(0)}</td>
+                    <td class="${cls}">$${net}</td>
+                    <td><span class="badge badge-${t.status === 'executed' ? 'win' : 'loss'}">${t.status}</span></td>
+                </tr>`;
+            });
+        }
+        load();
+        setInterval(load, 15000);
+    </script>
+</body>
+</html>
