@@ -5,8 +5,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
 COPY . .
-RUN echo "=== FILES IN src/ ===" && ls -la src/ && echo "=== FILES IN . ===" && ls -la .
 
-RUN cargo build --release
+RUN cargo build --release 2>&1 | tee /tmp/build.log; \
+    test -f target/release/sharklet || (echo "BUILD FAILED - dumping log" && cat /tmp/build.log && exit 1)
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /app/target/release/sharklet ./sharklet
+COPY --from=builder /app/config ./config
+
+EXPOSE 8080
+CMD ["./sharklet"]
