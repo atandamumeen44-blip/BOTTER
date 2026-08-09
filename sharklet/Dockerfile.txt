@@ -1,0 +1,38 @@
+# ---- Build stage ----
+FROM rust:1.88-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Cache deps first (only rebuild this layer when Cargo.toml/lock change)
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release
+RUN rm -rf src
+
+# Now bring in the real source and rebuild
+COPY src ./src
+COPY config ./config
+COPY dashboard ./dashboard
+RUN touch src/main.rs && cargo build --release
+
+# ---- Runtime stage ----
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY --from=builder /app/target/release/sharklet ./sharklet
+COPY --from=builder /app/config ./config
+
+EXPOSE 8080
+
+CMD ["./sharklet"]
