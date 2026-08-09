@@ -1,0 +1,52 @@
+[package]
+name = "sharklet"
+version = "0.2.0"
+edition = "2021"
+authors = ["Sharklet Team"]
+description = "Enterprise-grade cross-chain flash loan arbitrage bot"
+license = "MIT"
+repository = "https://github.com/yourusername/sharklet"
+
+[dependencies]
+# ── Async Runtime ────────────────────────────────────────────────────
+tokio = { version = "1", features = ["full", "time", "signal"] }
+futures = "0.3"
+
+# ── Ethereum / Web3 ──────────────────────────────────────────────────
+ethers = { version = "2", features = ["ws", "rustls", "abigen"] }
+
+# ── Serialization & Configuration ────────────────────────────────────
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+dotenvy = "0.15"
+
+# ── Database (trade journal) ─────────────────────────────────────────
+rusqlite = { version = "0.31", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
+
+# ── Web Server (dashboard / health API) ──────────────────────────────
+warp = "0.3"
+
+# ── Observability ────────────────────────────────────────────────────
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+# ── Error Handling ───────────────────────────────────────────────────
+thiserror = "1"
+
+# ── Misc Utilities ───────────────────────────────────────────────────
+url = "2"
+chrono = "0.4"
+rand = "0.8"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true          # removes debug symbols from release binary
+panic = "abort"        # smaller binary, faster panics
