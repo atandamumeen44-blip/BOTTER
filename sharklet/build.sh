@@ -1,7 +1,7 @@
 #!/bin/bash
-set -e
+# Ensure Unix line endings – this file must be saved with LF, not CRLF
 
-# Overwrite risk_engine.rs
+# Overwrite risk_engine.rs (already correct, but safe to re-write)
 cat > src/risk_engine.rs << 'EOF'
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
@@ -148,10 +148,9 @@ impl RiskEngine {
 }
 EOF
 
-# Overwrite simulation.rs
+# Overwrite simulation.rs (already clean)
 cat > src/simulation.rs << 'EOF'
 use ethers::prelude::*;
-use ethers::abi::AbiDecode;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::timeout;
@@ -337,7 +336,7 @@ impl<M: Middleware + 'static> Simulator<M> {
         let call_result = timeout(Duration::from_secs(2), contract.execute_flash_loan(amount).call()).await;
         let call_ok = match call_result {
             Ok(Ok(())) => { trace.push(("eth_call revert check".into(), CheckStatus::Pass("would not revert".into()))); true }
-            Ok(Err(e)) => { let decoded = decode_revert_reason(&e); trace.push(("eth_call revert check".into(), CheckStatus::Fail(format!("would revert: {decoded}")))); false }
+            Ok(Err(e)) => { let decoded = format!("{e:?}"); trace.push(("eth_call revert check".into(), CheckStatus::Fail(format!("would revert: {decoded}")))); false }
             Err(_) => { trace.push(("eth_call revert check".into(), CheckStatus::Fail("timeout".into()))); false }
         };
         if !call_ok { return (None, None, None); }
@@ -353,11 +352,9 @@ impl<M: Middleware + 'static> Simulator<M> {
         estimate.map(|g| g * 12 / 10)
     }
 }
-
-fn decode_revert_reason(err: &impl std::fmt::Debug) -> String { format!("{err:?}") }
 EOF
 
-# Overwrite executor.rs
+# Overwrite executor.rs (FIXED: no .client(), use signer from contract's middleware)
 cat > src/executor.rs << 'EOF'
 use ethers::prelude::*;
 use std::sync::Arc;
@@ -433,7 +430,9 @@ impl<M: Middleware + 'static> Executor<M> {
         let receipt = if let Some(ref relay) = self.private_relay {
             let nonce = self.nonce.unwrap();
             call.tx.set_nonce(nonce);
-            let signed = call.tx.rlp_signed(&call.client().signer().sign_transaction_sync(&call.tx).map_err(|e| ExecutorError::SendFailed(format!("sign error: {e:?}")))?);
+            // In ethers v2, the signer is inside the SignerMiddleware – we access it via the contract's client
+            let signer = self.contract.client().signer();
+            let signed = call.tx.rlp_signed(&signer.sign_transaction_sync(&call.tx).map_err(|e| ExecutorError::SendFailed(format!("sign error: {e:?}")))?);
             let pending = relay.send_raw_transaction(signed).await.map_err(|e| ExecutorError::SendFailed(format!("relay send: {e:?}")))?;
             self.nonce = Some(nonce + 1);
             pending.await.map_err(|e| ExecutorError::SendFailed(format!("{e:?}")))?.ok_or(ExecutorError::NoReceipt)?
@@ -467,7 +466,7 @@ impl<M: Middleware + 'static> Executor<M> {
 }
 EOF
 
-# Overwrite main.rs
+# Overwrite main.rs (FIXED: remove .await from PriceOracle::from_chain_config)
 cat > src/main.rs << 'EOF'
 mod scanner;
 mod risk_engine;
@@ -534,7 +533,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gas_manager = GasManager::new(wallet.address(), read_provider.clone());
     let gas_manager = RwLock::new(gas_manager);
 
-    let oracle = Arc::new(price_oracle::PriceOracle::from_chain_config(read_provider.clone(), chain_id).await);
+    // FIX: PriceOracle::from_chain_config is NOT async – remove .await
+    let oracle = Arc::new(price_oracle::PriceOracle::from_chain_config(read_provider.clone(), chain_id));
     let fallback_price = std::env::var("MATIC_USD_PRICE_HINT").ok().and_then(|s| s.parse().ok()).unwrap_or(0.60);
 
     let pairs = dex_registry::resolve_all_pools(read_provider.clone(), &dex_registry::known_dexes(), &dex_registry::token_pairs()).await;
@@ -656,7 +656,201 @@ async fn log_trade(db: &logger::Logger, opp: &scanner::Opportunity, size: Option
 }
 EOF
 
-# Overwrite api.rs (with embedded dashboard)
+# Overwrite scanner.rs (FIXED: use RefCell to allow multiple borrows)
+cat > src/scanner.rs << 'EOF'
+use ethers::prelude::*;
+use ethers::contract::abigen;
+use std::sync::Arc;
+use std::cell::RefCell;
+use std::time::{Duration, Instant};
+use tokio::time::timeout;
+use tracing::{debug, warn};
+
+abigen!(
+    IUniswapV2Pair,
+    r#"[
+        function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)
+        function token0() external view returns (address)
+        function token1() external view returns (address)
+    ]"#
+);
+
+abigen!(
+    IUniswapV2RouterQuote,
+    r#"[
+        function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts)
+    ]"#
+);
+
+#[derive(Debug, Clone)]
+pub struct PoolQuote {
+    pub dex_name: String,
+    pub pool: Address,
+    pub reserve_token0: u128,
+    pub reserve_token1: u128,
+    pub token0: Address,
+    pub token1: Address,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackedPair {
+    pub label: String,
+    pub pools: Vec<(String, Address)>,
+    pub token0: Address,
+    pub token1: Address,
+    pub routers: Vec<(String, Address)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct Opportunity {
+    pub label: String,
+    pub buy_dex: String,
+    pub sell_dex: String,
+    pub buy_price: f64,
+    pub sell_price: f64,
+    pub spread_pct: f64,
+    pub buy_pool_depth: f64,
+    pub sell_pool_depth: f64,
+    pub token0: Address,
+    pub token1: Address,
+    pub block_number: Option<u64>,
+}
+
+pub struct Scanner<M: Middleware> {
+    provider: Arc<M>,
+    pairs: Vec<TrackedPair>,
+    token0_decimals: u32,
+    token1_decimals: u32,
+    cache: RefCell<Vec<(String, Address, PoolQuote, Instant)>>,
+    cache_ttl: Duration,
+    min_spread_pct: f64,
+}
+
+impl<M: Middleware + 'static> Scanner<M> {
+    pub fn new(provider: Arc<M>, pairs: Vec<TrackedPair>, token0_decimals: u32, token1_decimals: u32) -> Self {
+        let min_spread = std::env::var("MIN_SPREAD_PCT").ok().and_then(|s| s.parse().ok()).unwrap_or(0.05);
+        Self {
+            provider,
+            pairs,
+            token0_decimals,
+            token1_decimals,
+            cache: RefCell::new(Vec::new()),
+            cache_ttl: Duration::from_secs(2),
+            min_spread_pct: min_spread,
+        }
+    }
+
+    async fn fetch_pool_async(&self, dex_name: &str, pool_addr: Address) -> Option<PoolQuote> {
+        let now = Instant::now();
+        if let Some((_, _, quote, fetched)) = self.cache.borrow().iter().find(|(d,a,_,_)| d == dex_name && *a == pool_addr) {
+            if now - *fetched < self.cache_ttl { return Some(quote.clone()); }
+        }
+
+        let pool = IUniswapV2Pair::new(pool_addr, self.provider.clone());
+        let fetch_future = async {
+            let (reserve0, reserve1, _) = pool.get_reserves().call().await?;
+            let token0 = pool.token_0().call().await?;
+            let token1 = pool.token_1().call().await?;
+            Ok::<_, ethers::contract::ContractError<M>>(PoolQuote {
+                dex_name: dex_name.to_string(), pool: pool_addr,
+                reserve_token0: reserve0, reserve_token1: reserve1,
+                token0, token1,
+            })
+        };
+
+        match timeout(Duration::from_secs(2), fetch_future).await {
+            Ok(Ok(quote)) => {
+                self.cache.borrow_mut().push((dex_name.to_string(), pool_addr, quote.clone(), Instant::now()));
+                Some(quote)
+            }
+            _ => None,
+        }
+    }
+
+    fn implied_price(&self, q: &PoolQuote) -> f64 {
+        let r0 = q.reserve_token0 as f64 / 10f64.powi(self.token0_decimals as i32);
+        let r1 = q.reserve_token1 as f64 / 10f64.powi(self.token1_decimals as i32);
+        if r0 == 0.0 { return 0.0; }
+        r1 / r0
+    }
+
+    fn router_for_dex(&self, dex_name: &str) -> Option<Address> {
+        self.pairs.iter().find_map(|p| p.routers.iter().find(|(n,_)| n == dex_name).map(|(_, a)| *a))
+    }
+
+    async fn quote(&self, router: Address, amount_in: u128, path: Vec<Address>) -> Option<u128> {
+        let contract = IUniswapV2RouterQuote::new(router, self.provider.clone());
+        contract.get_amounts_out(U256::from(amount_in), path).call().await
+            .ok().and_then(|amounts| amounts.last().copied().map(|a| a.as_u128()))
+    }
+
+    pub async fn scan(&mut self) -> Vec<Opportunity> {
+        let block_number = self.provider.get_block_number().await.ok().map(|n| n.as_u64());
+        let mut raw = Vec::new();
+
+        for pair in &self.pairs {
+            if pair.pools.len() < 2 { continue; }
+
+            let futures = pair.pools.iter().map(|(dex_name, addr)| {
+                let dex = dex_name.clone();
+                let addr = *addr;
+                self.fetch_pool_async(&dex, addr)
+            });
+            let quotes: Vec<PoolQuote> = futures::future::join_all(futures).await.into_iter().filter_map(|q| q).collect();
+
+            if quotes.len() < 2 { continue; }
+
+            for i in 0..quotes.len() {
+                for j in (i+1)..quotes.len() {
+                    let p_i = self.implied_price(&quotes[i]);
+                    let p_j = self.implied_price(&quotes[j]);
+                    if p_i <= 0.0 || p_j <= 0.0 { continue; }
+                    let (cheap, expensive, cheap_price, exp_price) = if p_i < p_j {
+                        (&quotes[i], &quotes[j], p_i, p_j)
+                    } else {
+                        (&quotes[j], &quotes[i], p_j, p_i)
+                    };
+                    let spread_pct = (exp_price - cheap_price) / cheap_price * 100.0;
+                    if spread_pct < self.min_spread_pct { continue; }
+                    raw.push(Opportunity {
+                        label: pair.label.clone(),
+                        buy_dex: cheap.dex_name.clone(),
+                        sell_dex: expensive.dex_name.clone(),
+                        buy_price: cheap_price,
+                        sell_price: exp_price,
+                        spread_pct,
+                        buy_pool_depth: cheap.reserve_token0 as f64 / 10f64.powi(self.token0_decimals as i32),
+                        sell_pool_depth: expensive.reserve_token0 as f64 / 10f64.powi(self.token0_decimals as i32),
+                        token0: pair.token0,
+                        token1: pair.token1,
+                        block_number,
+                    });
+                }
+            }
+        }
+
+        raw.sort_by(|a,b| b.spread_pct.partial_cmp(&a.spread_pct).unwrap());
+        let top = raw.into_iter().take(5);
+
+        let mut validated = Vec::new();
+        for opp in top {
+            let buy_router = self.router_for_dex(&opp.buy_dex);
+            let sell_router = self.router_for_dex(&opp.sell_dex);
+            let (Some(buy_router), Some(sell_router)) = (buy_router, sell_router) else { continue; };
+            let probe = 1_000 * 10u128.pow(self.token0_decimals);
+            let path_out = vec![opp.token0, opp.token1];
+            let buy_amount = match self.quote(buy_router, probe, path_out).await { Some(a) => a, None => continue; };
+            let path_back = vec![opp.token1, opp.token0];
+            let sell_amount = match self.quote(sell_router, buy_amount, path_back).await { Some(a) => a, None => continue; };
+            if sell_amount <= probe { continue; }
+            validated.push(opp);
+        }
+        validated
+    }
+}
+EOF
+
+# Overwrite api.rs (unchanged, just here for completeness)
 cat > src/api.rs << 'EOF'
 use warp::Filter;
 use std::sync::Arc;
@@ -855,4 +1049,5 @@ pub async fn start_server(state: Arc<AppState>, db: Arc<crate::logger::Logger>) 
 }
 EOF
 
-echo "All source files replaced successfully"
+# Now build
+cargo build --release
