@@ -1,121 +1,136 @@
-// src/simulation.rs
-//  Full enterprise pre-flight simulator
 
-use ethers::prelude::*;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::time::timeout;
-use crate::rpc_manager::RpcManager;
-use crate::scanner::Opportunity;
-use crate::profit_calc::SizedTrade;
+Commit changes
+There was an error committing your changes: atandamumeen44-blip has committed since you started editing. See what changed
+Commit message
+Update simulation.rs
+Extended description
+Add an optional extended description...
+Direct commit or PR
 
-#[derive(Debug)]
-pub enum CheckStatus {
-    Pass(String),
-    Fail(String),
-    Skipped(String),
-}
+Commit directly to the main branch
 
-#[derive(Debug)]
-pub struct SimulationReport {
-    pub passed: bool,
-    pub trace: Vec<(String, CheckStatus)>,
-    pub gas_metrics: GasMetrics,
-    pub rpc_consensus_ok: bool,
-    pub predicted_amount_out: Option<U256>,
-    pub estimated_gas_units: Option<U256>,
-    pub estimated_profit_after_gas_usd: Option<f64>,
-}
+Create a new branch for this commit and start a pull request Learn more about pull requests
+Skip to content
+atandamumeen44-blip
+BOTTER
+Repository navigation
+Code
+Issues
+3
+ (3)
+Pull requests
+Actions
+Projects
+Wiki
+Security and quality
+Insights
+Settings
+Files
+Go to file
+t
+T
+sharklet
+config
+contracts
+dashboard
+src
+api.rs
+dex_registry.rs
+executor.rs
+gas_manager.rs
+logger.rs
+main.rs
+price_oracle.rs
+profit_calc.rs
+risk_engine.rs
+rpc_manager.rs
+scanner.rs
+simulation.rs
+Cargo.toml
+README.md
+blueprint.html
+dashboard.html
+filestructure.txt
+run_bot.sh
+rust-toolchain.toml.txt
+.env.example
+.gitignore
+Cargo.toml
+README.md
+blueprint.html
+dashboard.html
+filestructure.txt
+run_bot.sh
+BOTTER/sharklet/src
+/
+simulation.rs
+in
+main
 
-#[derive(Debug, Clone)]
-pub struct GasMetrics {
-    pub base_fee_gwei: f64,
-    pub priority_fee_gwei: f64,
-    pub max_total_fee_gwei: f64,
-    pub estimated_gas_cost_usd: f64,
-}
+Edit
 
-pub struct SimulationConfig {
-    pub max_total_fee_gwei: f64,
-    pub max_priority_fee_gwei: f64,
-    pub min_profit_after_gas_usd: f64,
-    pub max_block_age_seconds: u64,
-    pub max_rpc_block_disagreement: u64,
-    pub min_liquidity_usd: f64,
-    pub max_trade_vs_depth_ratio: f64,
-    pub max_gas_vs_block_limit_ratio: f64,
-}
+Preview
+Indent mode
 
-impl Default for SimulationConfig {
-    fn default() -> Self {
-        SimulationConfig {
-            max_total_fee_gwei: env_parse_or("MAX_TOTAL_FEE_GWEI", 200.0),
-            max_priority_fee_gwei: env_parse_or("MAX_PRIORITY_FEE_GWEI", 5.0),
-            min_profit_after_gas_usd: env_parse_or("MIN_PROFIT_AFTER_GAS_USD", 20.0),
-            max_block_age_seconds: env_parse_or("MAX_BLOCK_AGE_SECONDS", 30),
-            max_rpc_block_disagreement: 1,
-            min_liquidity_usd: env_parse_or("MIN_LIQUIDITY_USD", 50_000.0),
-            max_trade_vs_depth_ratio: 0.1,
-            max_gas_vs_block_limit_ratio: 0.25,
-        }
-    }
-}
+Spaces
+Indent size
 
-fn env_parse_or<T: std::str::FromStr>(key: &str, default: T) -> T {
-    std::env::var(key).ok().and_then(|s| s.parse().ok()).unwrap_or(default)
-}
+4
+Line wrap mode
 
-abigen!(
-    FlashArbSim,
-    r#"[
-        function executeFlashLoan(uint256 amount) external
-    ]"#
-);
-
-pub struct Simulator<M: Middleware> {
-    provider: Arc<M>,
-    rpc_manager: Arc<RpcManager>,
-    contract_address: Address,
-    config: SimulationConfig,
-}
-
-impl<M: Middleware + 'static> Simulator<M> {
-    pub fn new(provider: Arc<M>, rpc_manager: Arc<RpcManager>, contract_address: Address, config: SimulationConfig) -> Self {
-        Simulator { provider, rpc_manager, contract_address, config }
-    }
-    pub async fn run(&self, opp: &Opportunity, sized: &SizedTrade) -> SimulationReport {
-        let mut trace = Vec::new();
-        let mut passed = true;
-
-        let (rpc_ok, _) = self.check_rpc_health(&mut trace).await;
-        if !rpc_ok { passed = false; }
-
-        let (gas_ok, gas_metrics) = self.check_gas(&mut trace).await;
-        if !gas_ok { passed = false; }
-
-        self.check_liquidity_and_sizing(opp, sized, &mut trace);
-
-        let mut predicted_amount_out = None;
-        let mut estimated_gas_units = None;
-        let mut estimated_profit_after_gas_usd = None;
-
-        if passed {
-            let contract = FlashArbSim::new(self.contract_address, self.provider.clone());
-            let amount = U256::from((sized.size_usd * 1e6) as u128);
-            match timeout(Duration::from_secs(2), contract.execute_flash_loan(amount).call()).await {
-                Ok(Ok(())) => {
-                    trace.push(("eth_call revert".into(), CheckStatus::Pass("would not revert".into())));
-                    predicted_amount_out = Some(amount);
-                }
-                Ok(Err(e)) => {
-                    trace.push(("eth_call revert".into(), CheckStatus::Fail(format!("would revert: {e:?}"))));
-                    passed = false;
-                }
-                Err(_) => {
-                    trace.push(("eth_call revert".into(), CheckStatus::Fail("timeout".into())));
-                    passed = false;
-                }
-            }
+No wrap
+Editing simulation.rs file contents
+119
+120
+121
+122
+123
+124
+125
+126
+127
+128
+129
+130
+131
+132
+133
+134
+135
+136
+137
+138
+139
+140
+141
+142
+143
+144
+145
+146
+147
+148
+149
+150
+151
+152
+153
+154
+155
+156
+157
+158
+159
+160
+161
+162
+163
+164
+165
+166
+167
+168
+169
 
             let profit = sized.net_profit_usd; // using net_profit_usd
             estimated_profit_after_gas_usd = Some(profit);
@@ -167,3 +182,5 @@ impl<M: Middleware + 'static> Simulator<M> {
         }
     }
 }
+Use Control + Shift + m to toggle the tab key moving focus. Alternatively, use esc then tab to move to the next interactive element on the page.
+Editing BOTTER/sharklet/src/simulation.rs at main · atandamumeen44-blip/BOTTER
