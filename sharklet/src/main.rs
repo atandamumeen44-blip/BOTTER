@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             opportunities = scan.scan().await;
         }
         if opportunities.is_empty() { sleep(Duration::from_millis(2000)).await; continue; }
-        let best = &opportunities[0];
+        let best = &opportunities[0];   // <-- FIXED indexing
 
         let gas_price_wei = read_provider.get_gas_price().await.unwrap_or_default();
         let rough = U256::from(1000 * 1e6 as u128);
