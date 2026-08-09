@@ -1,7 +1,5 @@
-
 #!/bin/bash
-# Ensure Unix line endings (LF), not CRLF
-
+# Overwrite risk_engine.rs
 cat > src/risk_engine.rs << 'EOF'
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
@@ -148,6 +146,7 @@ impl RiskEngine {
 }
 EOF
 
+# Overwrite simulation.rs
 cat > src/simulation.rs << 'EOF'
 use ethers::prelude::*;
 use std::sync::Arc;
@@ -353,6 +352,7 @@ impl<M: Middleware + 'static> Simulator<M> {
 }
 EOF
 
+# Overwrite executor.rs (FIXED: signer access)
 cat > src/executor.rs << 'EOF'
 use ethers::prelude::*;
 use std::sync::Arc;
@@ -463,6 +463,7 @@ impl<M: Middleware + 'static> Executor<M> {
 }
 EOF
 
+# Overwrite main.rs (FIXED: oracle without .await)
 cat > src/main.rs << 'EOF'
 mod scanner;
 mod risk_engine;
@@ -650,6 +651,7 @@ async fn log_trade(db: &logger::Logger, opp: &scanner::Opportunity, size: Option
 }
 EOF
 
+# Overwrite scanner.rs (FIXED: RefCell)
 cat > src/scanner.rs << 'EOF'
 use ethers::prelude::*;
 use ethers::contract::abigen;
