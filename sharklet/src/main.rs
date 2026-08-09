@@ -230,3 +230,6 @@ async fn log_trade(db: &logger::Logger, opp: &scanner::Opportunity, size: Option
         tx_hash: None,
     }).await;
 }
+
+
+    
