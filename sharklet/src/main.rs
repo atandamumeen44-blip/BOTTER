@@ -23,7 +23,55 @@ use gas_manager::GasManager;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
+use tokio::time;
 use tokio::time::sleep;
+use tracing::{info, warn, error};
+use tracing_subscriber::EnvFilter;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env().add_directive("sharklet=info".parse()?))
+        .with_target(true)
+        .json()
+        .init();
+    info!("🦈 Sharklet starting");
+
+    dotenvy::dotenv().ok();
+    let private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY");
+    let rpc_urls: Vec<String> = std::env::var("RPC_URLS").expect("RPC_URLS").split(',').map(|s| s.trim().to_string()).collect();
+    let contract_address: Address = std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS").parse()?;
+    let chain_id: u64 = std::env::var("CHAIN_ID").unwrap_or_else(|_| "137".into()).parse()?;
+    let wallet: LocalWallet = private_key.parse::<LocalWallet>()?.with_chain_id(chain_id);
+
+    let rpc_manager = Arc::new(RpcManager::new(rpc_urls)?);
+    rpc_manager.start_health_checks();
+    let read_provider = rpc_manager.best().await;
+    let signer_provider = Arc::new(SignerMiddleware::new((*read_provider).clone(), wallet.clone()));
+
+    let risk_engine = RiskEngine::from_toml("config/bot.toml");
+    let risk_engine = RwLock::new(risk_engine);
+
+    let private_relay_url = std::env::var("PRIVATE_RELAY_URL").ok().filter(|s| !s.is_empty());
+    let mut executor = Executor::new(contract_address, wallet.clone(), signer_provider.clone(), read_provider.clone(), private_relay_url);
+    executor.sync_nonce().await?;
+    let executor = RwLock::new(executor);
+
+    let simulator = Arc::new(simulation::Simulator::new(read_provider.clone(), rpc_manager.clone(), contract_address, simulation::SimulationConfig::default()));
+
+    let db_path = std::env::var("DB_PATH").unwrap_or_else(|_| "sharklet.db".into());
+    let db = Arc::new(logger::Logger::open(&db_path)?);
+
+    let gas_manager = GasManager::new(wallet.address(), read_provider.clone());
+    let gas_manager = RwLock::new(gas_manager);
+
+    let oracle = Arc::new(price_oracle::PriceOracle::from_chain_config(read_provider.clone(), chain_id).await);
+    let fallback_price = std::env::var("MATIC_USD_PRICE_HINT").ok().and_then(|s| s.parse().ok()).unwrap_or(0.60);
+
+    let pairs = dex_registry::resolve_all_pools(read_provider.clone(), &dex_registry::known_dexes(), &dex_registry::token_pairs()).await;
+    let scanner = RwLock::new(Scanner::new(read_provider.clone(), pairs, 6, 18));
+
+    let app_state::sleep;
 use tracing::{info, warn, error};
 use tracing_subscriber::EnvFilter;
 
