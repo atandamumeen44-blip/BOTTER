@@ -1,6 +1,4 @@
 // src/risk_engine.rs
-//  Single, clean adaptive risk engine
-
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
 use tracing::warn;
