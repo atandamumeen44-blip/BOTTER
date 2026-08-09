@@ -1,6 +1,4 @@
 // src/simulation.rs
-//  Full enterprise pre-flight simulator – single version
-
 use ethers::prelude::*;
 use ethers::abi::AbiDecode;
 use std::sync::Arc;
@@ -193,6 +191,12 @@ impl<M: Middleware + 'static> Simulator<M> {
         };
         if !call_ok { return (None, None, None); }
         let estimated_gas = self.estimate_gas_for_arb(&contract, amount).await;
+        let gas_units = estimated_gas.map(|g| g.into());
+        let profit_after_gas = sized.net_profit_usd;
+        (Some(amount), gas_units, Some(profit_after_gas))
+    }
+
+    async fn estimate_gas_for_arb(&self, contract: &FlashArbSim<M>, amount: U256) -> Option_gas = self.estimate_gas_for_arb(&contract, amount).await;
         let gas_units = estimated_gas.map(|g| g.into());
         let profit_after_gas = sized.net_profit_usd;
         (Some(amount), gas_units, Some(profit_after_gas))
