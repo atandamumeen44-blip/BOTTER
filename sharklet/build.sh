@@ -1,7 +1,6 @@
 #!/bin/bash
-# Ensure Unix line endings – this file must be saved with LF, not CRLF
+# Ensure Unix line endings (LF), not CRLF
 
-# Overwrite risk_engine.rs (already correct, but safe to re-write)
 cat > src/risk_engine.rs << 'EOF'
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::Deserialize;
@@ -148,7 +147,6 @@ impl RiskEngine {
 }
 EOF
 
-# Overwrite simulation.rs (already clean)
 cat > src/simulation.rs << 'EOF'
 use ethers::prelude::*;
 use std::sync::Arc;
@@ -354,7 +352,6 @@ impl<M: Middleware + 'static> Simulator<M> {
 }
 EOF
 
-# Overwrite executor.rs (FIXED: no .client(), use signer from contract's middleware)
 cat > src/executor.rs << 'EOF'
 use ethers::prelude::*;
 use std::sync::Arc;
@@ -430,7 +427,6 @@ impl<M: Middleware + 'static> Executor<M> {
         let receipt = if let Some(ref relay) = self.private_relay {
             let nonce = self.nonce.unwrap();
             call.tx.set_nonce(nonce);
-            // In ethers v2, the signer is inside the SignerMiddleware – we access it via the contract's client
             let signer = self.contract.client().signer();
             let signed = call.tx.rlp_signed(&signer.sign_transaction_sync(&call.tx).map_err(|e| ExecutorError::SendFailed(format!("sign error: {e:?}")))?);
             let pending = relay.send_raw_transaction(signed).await.map_err(|e| ExecutorError::SendFailed(format!("relay send: {e:?}")))?;
@@ -466,7 +462,6 @@ impl<M: Middleware + 'static> Executor<M> {
 }
 EOF
 
-# Overwrite main.rs (FIXED: remove .await from PriceOracle::from_chain_config)
 cat > src/main.rs << 'EOF'
 mod scanner;
 mod risk_engine;
@@ -533,14 +528,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gas_manager = GasManager::new(wallet.address(), read_provider.clone());
     let gas_manager = RwLock::new(gas_manager);
 
-    // FIX: PriceOracle::from_chain_config is NOT async – remove .await
     let oracle = Arc::new(price_oracle::PriceOracle::from_chain_config(read_provider.clone(), chain_id));
     let fallback_price = std::env::var("MATIC_USD_PRICE_HINT").ok().and_then(|s| s.parse().ok()).unwrap_or(0.60);
 
     let pairs = dex_registry::resolve_all_pools(read_provider.clone(), &dex_registry::known_dexes(), &dex_registry::token_pairs()).await;
     let scanner = RwLock::new(Scanner::new(read_provider.clone(), pairs, 6, 18));
 
-    // Start dashboard API with DB access
     let app_state = Arc::new(api::AppState { health: true });
     let db_clone = db.clone();
     tokio::spawn(api::start_server(app_state, db_clone));
@@ -656,7 +649,6 @@ async fn log_trade(db: &logger::Logger, opp: &scanner::Opportunity, size: Option
 }
 EOF
 
-# Overwrite scanner.rs (FIXED: use RefCell to allow multiple borrows)
 cat > src/scanner.rs << 'EOF'
 use ethers::prelude::*;
 use ethers::contract::abigen;
@@ -850,204 +842,4 @@ impl<M: Middleware + 'static> Scanner<M> {
 }
 EOF
 
-# Overwrite api.rs (unchanged, just here for completeness)
-cat > src/api.rs << 'EOF'
-use warp::Filter;
-use std::sync::Arc;
-use serde_json::json;
-
-pub struct AppState {
-    pub health: bool,
-}
-
-pub async fn start_server(state: Arc<AppState>, db: Arc<crate::logger::Logger>) {
-    let db_filter = warp::any().map(move || db.clone());
-    let health = warp::path("health").map(|| warp::reply::json(&json!({"status": "ok"})));
-
-    let stats = warp::path("api").and(warp::path("stats"))
-        .and(db_filter.clone())
-        .and_then(|db: Arc<crate::logger::Logger>| async move {
-            let total_profit = db.total_profit_within(86400*365).await.unwrap_or(0.0);
-            let today_profit = db.total_profit_within(86400).await.unwrap_or(0.0);
-            Ok::<_, warp::Rejection>(warp::reply::json(&json!({
-                "wallet_usd": 0.0,
-                "today_pnl": today_profit,
-                "total_pnl": total_profit,
-                "trades_today": 0,
-                "gas_gwei": 0,
-                "queue_size": 0,
-                "profit_series": []
-            })))
-        });
-
-    let trades = warp::path("api").and(warp::path("trades"))
-        .and(db_filter)
-        .and_then(|db: Arc<crate::logger::Logger>| async move {
-            let recent = db.recent_trades(50).await.unwrap_or_default();
-            let data: Vec<_> = recent.into_iter().map(|t| json!({
-                "time": "-",
-                "pair": t.pair_label,
-                "buy_dex": t.buy_dex,
-                "sell_dex": t.sell_dex,
-                "spread_pct": t.spread_pct,
-                "net_usd": t.realized_net_usd,
-                "status": t.status,
-            })).collect();
-            Ok::<_, warp::Rejection>(warp::reply::json(&data))
-        });
-
-    let dashboard = warp::path::end().map(|| {
-        warp::reply::html(r###"
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sharklet – Control Panel</title>
-<style>
-  :root{
-    --abyss:#07090c; --panel:#0d1218; --panel-2:#121924; --line:#1c2733;
-    --amber:#ffb454; --amber-dim:#7a5a2e; --teal:#3ddad0; --red:#ff5c5c; --violet:#9d8cff;
-    --text:#e6ecf1; --text-dim:#8b96a3; --text-faint:#4d5763;
-    --mono: 'SF Mono', 'Consolas', 'Monaco', monospace;
-    --sans: -apple-system, 'Segoe UI', system-ui, sans-serif;
-    --radius: 12px;
-  }
-  *{margin:0;padding:0;box-sizing:border-box;}
-  html{scrollbar-color:#2a3543 transparent;}
-  body{
-    background:
-      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(255,180,84,.06), transparent 60%),
-      radial-gradient(ellipse 900px 600px at 85% 105%, rgba(61,218,208,.05), transparent 60%),
-      var(--abyss);
-    color:var(--text); font-family:var(--sans); min-height:100vh; letter-spacing:.1px;
-  }
-  header{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:1rem 1.6rem; border-bottom:1px solid var(--line);
-    background:rgba(13,18,24,.75); backdrop-filter:blur(14px);
-    position:sticky; top:0; z-index:10;
-  }
-  .brand{display:flex; align-items:center; gap:.7rem;}
-  .brand .mark{font-size:1.35rem;}
-  .brand h1{font-size:1.05rem; font-weight:800; letter-spacing:.4px;}
-  .brand .sub{font-size:.66rem; color:var(--text-faint); font-family:var(--mono); letter-spacing:.6px;}
-
-  .ping{display:flex; align-items:center; gap:.6rem; font-family:var(--mono); font-size:.72rem;}
-  .ping-dot{width:9px; height:9px; border-radius:50%; background:var(--text-faint); position:relative; flex-shrink:0;}
-  .ping-dot.live{background:var(--teal);}
-  .ping-dot.live::after{content:''; position:absolute; inset:-6px; border-radius:50%; border:1px solid var(--teal); animation:sonar 2.2s ease-out infinite;}
-  @keyframes sonar{ 0%{transform:scale(.5); opacity:.9;} 100%{transform:scale(2.2); opacity:0;} }
-  .mode-label{text-transform:uppercase; letter-spacing:1px; font-weight:700;}
-  .mode-label.live{color:var(--teal);}
-
-  main{max-width:1180px; margin:0 auto; padding:1.6rem;}
-
-  .stat-rail{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
-    background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; margin-bottom:1.6rem;}
-  .stat{background:var(--panel); padding:1.15rem 1.25rem; transition:background .2s;}
-  .stat .k{font-size:.65rem; text-transform:uppercase; letter-spacing:.8px; color:var(--text-faint); margin-bottom:.4rem;}
-  .stat .v{font-family:var(--mono); font-size:1.45rem; font-weight:700;}
-
-  .grid2{display:grid; grid-template-columns:1.6fr 1fr; gap:1.2rem; margin-bottom:1.2rem;}
-  @media(max-width:860px){ .grid2{grid-template-columns:1fr;} }
-
-  .card{
-    background:linear-gradient(180deg, var(--panel), rgba(13,18,24,.85));
-    border:1px solid var(--line); border-radius:var(--radius); padding:1.25rem;
-  }
-  .card h2{font-size:.74rem; text-transform:uppercase; letter-spacing:1px; color:var(--text-dim); margin-bottom:1rem;}
-
-  canvas{width:100%; display:block;}
-
-  table{width:100%; border-collapse:collapse; font-size:.78rem;}
-  th{text-align:left; font-size:.65rem; text-transform:uppercase; letter-spacing:.6px; color:var(--text-faint);
-     padding:.5rem .6rem; border-bottom:1px solid var(--line); font-weight:600;}
-  td{padding:.55rem .6rem; border-bottom:1px solid var(--line); font-family:var(--mono); color:var(--text-dim);}
-  .status-pill{font-size:.65rem; padding:.15rem .5rem; border-radius:4px; font-weight:700; text-transform:uppercase;}
-  .status-pill.executed{background:rgba(61,218,208,.12); color:var(--teal);}
-  .status-pill.skipped, .status-pill.rejected, .status-pill.sim_rejected{background:rgba(255,180,84,.1); color:var(--amber);}
-  .status-pill.failed{background:rgba(255,92,92,.12); color:var(--red);}
-  .net-pos{color:var(--teal);} .net-neg{color:var(--red);}
-</style>
-</head>
-<body>
-<header>
-  <div class="brand">
-    <span class="mark">🦈</span>
-    <div>
-      <h1>SHARKLET</h1>
-      <div class="sub">CONTROL PANEL</div>
-    </div>
-  </div>
-  <div class="ping">
-    <span class="ping-dot live" id="pingDot"></span>
-    <span class="mode-label live" id="modeLabel">LIVE</span>
-    <span id="clock">--:--:--</span>
-  </div>
-</header>
-<main>
-  <div class="stat-rail" id="statRail"></div>
-  <div class="grid2">
-    <div class="card">
-      <h2>Profit Curve</h2>
-      <canvas id="profitChart" height="140"></canvas>
-    </div>
-    <div class="card">
-      <h2>Trade Log</h2>
-      <table>
-        <thead><tr><th>Time</th><th>Pair</th><th>Route</th><th>Spread</th><th>Net</th><th>Status</th></tr></thead>
-        <tbody id="tradeBody"></tbody>
-      </table>
-      <div id="tradeEmpty">No trades yet</div>
-    </div>
-  </div>
-</main>
-<footer>Sharklet · polling /api/stats, /api/trades every 3s</footer>
-<script>
-(function(){
-  const $ = id => document.getElementById(id);
-  async function refresh(){
-    try {
-      const [stats, trades] = await Promise.all([
-        fetch('/api/stats').then(r=>r.json()),
-        fetch('/api/trades').then(r=>r.json())
-      ]);
-      $('statRail').innerHTML = [
-        ['Wallet', '$'+stats.wallet_usd.toFixed(2)],
-        ["Today's P&L", (stats.today_pnl>=0?'+':'')+'$'+stats.today_pnl.toFixed(2)],
-        ['Total P&L', (stats.total_pnl>=0?'+':'')+'$'+stats.total_pnl.toFixed(2)],
-        ['Trades Today', stats.trades_today],
-        ['Gas', stats.gas_gwei+' gwei'],
-      ].map(([k,v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('');
-      const tbody = $('tradeBody');
-      tbody.innerHTML = trades.map(t => `
-        <tr>
-          <td>${t.time}</td>
-          <td>${t.pair}</td>
-          <td>${t.buy_dex} → ${t.sell_dex}</td>
-          <td>${t.spread_pct.toFixed(2)}%</td>
-          <td class="${t.net_usd>0?'net-pos':t.net_usd<0?'net-neg':''}">${t.net_usd!=null ? (t.net_usd>=0?'+':'')+'$'+t.net_usd.toFixed(4) : '—'}</td>
-          <td><span class="status-pill ${t.status}">${t.status}</span></td>
-        </tr>
-      `).join('');
-      $('tradeEmpty').style.display = trades.length ? 'none' : 'block';
-      $('clock').textContent = new Date().toLocaleTimeString('en-US', { hour12:false });
-    } catch(e) { /* fallback to demo data */ }
-  }
-  refresh();
-  setInterval(refresh, 3000);
-})();
-</script>
-</body>
-</html>
-        "###)
-    });
-
-    let routes = dashboard.or(health).or(stats).or(trades);
-    warp::serve(routes).run(([0, 0, 0, 0], 8080)).await;
-}
-EOF
-
-# Now build
 cargo build --release
