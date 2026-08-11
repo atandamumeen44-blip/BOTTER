@@ -1,15 +1,8 @@
 // src/scanner.rs
 //
-//  ███████╗ ██████╗ █████╗ ███╗   ██╗███╗   ██╗███████╗██████╗
-//  ██╔════╝██╔════╝██╔══██╗████╗  ██║████╗  ██║██╔════╝██╔══██╗
-//  ███████╗██║     ███████║██╔██╗ ██║██╔██╗ ██║█████╗  ██████╔╝
-//  ╚════██║██║     ██╔══██║██║╚██╗██║██║╚██╗██║██╔══╝  ██╔══██╗
-//  ███████║╚██████╗██║  ██║██║ ╚████║██║ ╚████║███████╗██║  ██║
-//  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝
-//
-//  High‑frequency arbitrage scanner. Fetches pool reserves in parallel,
-//  caches them briefly, and validates the best spreads against actual
-//  router quotes (round‑trip) before emitting an Opportunity.
+// High-frequency arbitrage scanner. Fetches pool reserves in parallel,
+// caches them briefly, and validates the best spreads against actual
+// router quotes (round-trip) before emitting an Opportunity.
 
 use ethers::prelude::*;
 use ethers::contract::abigen;
@@ -49,10 +42,10 @@ pub struct PoolQuote {
 #[derive(Debug, Clone)]
 pub struct TrackedPair {
     pub label: String,
-    pub pools: Vec<(String, Address)>,        // (dex_name, pool_address)
+    pub pools: Vec<(String, Address)>, // (dex_name, pool_address)
     pub token0: Address,
     pub token1: Address,
-    pub routers: Vec<(String, Address)>,      // (dex_name, router_address)
+    pub routers: Vec<(String, Address)>, // (dex_name, router_address)
 }
 
 #[derive(Debug, Clone)]
@@ -67,7 +60,7 @@ pub struct Opportunity {
     pub sell_pool_depth: f64,
     pub token0: Address,
     pub token1: Address,
-    pub block_number: Option<u64>,   // the block at which this opp was discovered
+    pub block_number: Option<u64>,
 }
 
 pub struct Scanner<M: Middleware> {
@@ -75,7 +68,6 @@ pub struct Scanner<M: Middleware> {
     pairs: Vec<TrackedPair>,
     token0_decimals: u32,
     token1_decimals: u32,
-    /// Pool reserve cache: (dex_name, pool_addr, quote, fetched_at)
     cache: Vec<(String, Address, PoolQuote, Instant)>,
     cache_ttl: Duration,
     min_spread_pct: f64,
@@ -92,6 +84,7 @@ impl<M: Middleware + 'static> Scanner<M> {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0.05);
+
         Self {
             provider,
             pairs,
@@ -103,11 +96,11 @@ impl<M: Middleware + 'static> Scanner<M> {
         }
     }
 
-    /// Fetch pool reserves, using an in‑memory cache if still fresh.
     async fn fetch_pool(&mut self, dex_name: &str, pool_addr: Address) -> Option<PoolQuote> {
         let now = Instant::now();
-        // Check cache
-        if let Some((_, _, quote, fetched_at)) = self.cache
+
+        if let Some((_, _, quote, fetched_at)) = self
+            .cache
             .iter()
             .find(|(d, a, _, _)| d == dex_name && *a == pool_addr)
         {
@@ -117,9 +110,9 @@ impl<M: Middleware + 'static> Scanner<M> {
             }
         }
 
-        // Fetch fresh with a 2‑second timeout
         let timeout_dur = Duration::from_secs(2);
         let pool = IUniswapV2Pair::new(pool_addr, self.provider.clone());
+
         let fetch_future = async {
             let (reserve0, reserve1, _ts) = pool.get_reserves().call().await?;
             let token0 = pool.token_0().call().await?;
@@ -136,7 +129,6 @@ impl<M: Middleware + 'static> Scanner<M> {
 
         match tokio_timeout(timeout_dur, fetch_future).await {
             Ok(Ok(quote)) => {
-                // Update cache (remove old entry, insert new)
                 self.cache.retain(|(d, a, _, _)| !(d == dex_name && *a == pool_addr));
                 self.cache.push((dex_name.to_string(), pool_addr, quote.clone(), Instant::now()));
                 Some(quote)
@@ -155,7 +147,9 @@ impl<M: Middleware + 'static> Scanner<M> {
     fn implied_price(&self, q: &PoolQuote) -> f64 {
         let r0 = q.reserve_token0 as f64 / 10f64.powi(self.token0_decimals as i32);
         let r1 = q.reserve_token1 as f64 / 10f64.powi(self.token1_decimals as i32);
-        if r0 == 0.0 { return 0.0; }
+        if r0 == 0.0 {
+            return 0.0;
+        }
         r1 / r0
     }
 
@@ -183,12 +177,10 @@ impl<M: Middleware + 'static> Scanner<M> {
                 continue;
             }
 
-            // Fetch all pool quotes in parallel
             let mut futures = Vec::new();
             for (dex_name, addr) in &pair.pools {
                 futures.push(self.fetch_pool(dex_name, *addr));
             }
-
             let quotes: Vec<PoolQuote> = futures::future::join_all(futures)
                 .await
                 .into_iter()
@@ -199,7 +191,6 @@ impl<M: Middleware + 'static> Scanner<M> {
                 continue;
             }
 
-            // Compare every pair of venues
             for i in 0..quotes.len() {
                 for j in (i + 1)..quotes.len() {
                     let p_i = self.implied_price(&quotes[i]);
@@ -207,18 +198,15 @@ impl<M: Middleware + 'static> Scanner<M> {
                     if p_i <= 0.0 || p_j <= 0.0 {
                         continue;
                     }
-
                     let (cheap, expensive, cheap_price, exp_price) = if p_i < p_j {
                         (&quotes[i], &quotes[j], p_i, p_j)
                     } else {
                         (&quotes[j], &quotes[i], p_j, p_i)
                     };
-
                     let spread_pct = (exp_price - cheap_price) / cheap_price * 100.0;
                     if spread_pct < self.min_spread_pct {
                         continue;
                     }
-
                     raw.push(Opportunity {
                         label: pair.label.clone(),
                         buy_dex: cheap.dex_name.clone(),
@@ -236,11 +224,10 @@ impl<M: Middleware + 'static> Scanner<M> {
             }
         }
 
-        // Sort by spread descending and take top 5 for router validation
         raw.sort_by(|a, b| b.spread_pct.partial_cmp(&a.spread_pct).unwrap());
         let top = raw.into_iter().take(5);
-
         let mut validated = Vec::new();
+
         for opp in top {
             let buy_router = self.router_for_dex(&opp.buy_dex);
             let sell_router = self.router_for_dex(&opp.sell_dex);
@@ -263,7 +250,7 @@ impl<M: Middleware + 'static> Scanner<M> {
             };
 
             if sell_amount <= probe {
-                debug!("Round‑trip not profitable for {} — dropping", opp.label);
+                debug!("Round-trip not profitable for {} — dropping", opp.label);
                 continue;
             }
 
@@ -271,5 +258,67 @@ impl<M: Middleware + 'static> Scanner<M> {
         }
 
         validated
+    }
+
+    /// Re-check a single pair by label. Used for the "reswap" loop: after a
+    /// trade executes, quickly confirm the same opportunity is still there
+    /// before firing again, instead of blindly repeating on a stale spread.
+    pub async fn quick_check(&mut self, label: &str) -> Option<Opportunity> {
+        let block_number = self.provider.get_block_number().await.ok().map(|n| n.as_u64());
+        let pair = self.pairs.iter().find(|p| p.label == label)?.clone();
+        if pair.pools.len() < 2 {
+            return None;
+        }
+
+        let mut futures = Vec::new();
+        for (dex_name, addr) in &pair.pools {
+            futures.push(self.fetch_pool(dex_name, *addr));
+        }
+        let quotes: Vec<PoolQuote> = futures::future::join_all(futures)
+            .await
+            .into_iter()
+            .filter_map(|q| q)
+            .collect();
+
+        if quotes.len() < 2 {
+            return None;
+        }
+
+        let mut best: Option<Opportunity> = None;
+        for i in 0..quotes.len() {
+            for j in (i + 1)..quotes.len() {
+                let p_i = self.implied_price(&quotes[i]);
+                let p_j = self.implied_price(&quotes[j]);
+                if p_i <= 0.0 || p_j <= 0.0 {
+                    continue;
+                }
+                let (cheap, expensive, cheap_price, exp_price) = if p_i < p_j {
+                    (&quotes[i], &quotes[j], p_i, p_j)
+                } else {
+                    (&quotes[j], &quotes[i], p_j, p_i)
+                };
+                let spread_pct = (exp_price - cheap_price) / cheap_price * 100.0;
+                if spread_pct < self.min_spread_pct {
+                    continue;
+                }
+                let candidate = Opportunity {
+                    label: pair.label.clone(),
+                    buy_dex: cheap.dex_name.clone(),
+                    sell_dex: expensive.dex_name.clone(),
+                    buy_price: cheap_price,
+                    sell_price: exp_price,
+                    spread_pct,
+                    buy_pool_depth: cheap.reserve_token0 as f64 / 10f64.powi(self.token0_decimals as i32),
+                    sell_pool_depth: expensive.reserve_token0 as f64 / 10f64.powi(self.token0_decimals as i32),
+                    token0: pair.token0,
+                    token1: pair.token1,
+                    block_number,
+                };
+                if best.as_ref().map_or(true, |b| candidate.spread_pct > b.spread_pct) {
+                    best = Some(candidate);
+                }
+            }
+        }
+        best
     }
 }
