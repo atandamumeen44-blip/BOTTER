@@ -119,7 +119,7 @@ impl<M: Middleware + 'static> Executor<M> {
         let receipt = if let Some(ref relay) = self.private_relay {
             let nonce = self.nonce.unwrap();
             call.tx.set_nonce(nonce);
-            // ===== FIX: store the client in a variable first =====
+            // ===== FIX: store client in a variable =====
             let client = self.contract.client();
             let signer = client.signer();
             let signed = call.tx.rlp_signed(
@@ -127,7 +127,7 @@ impl<M: Middleware + 'static> Executor<M> {
                     .sign_transaction_sync(&call.tx)
                     .map_err(|e| ExecutorError::SendFailed(format!("sign error: {e:?}")))?,
             );
-            // ===================================================
+            // ========================================
             let pending = relay
                 .send_raw_transaction(signed)
                 .await
