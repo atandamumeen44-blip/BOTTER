@@ -1,8 +1,6 @@
 use ethers::prelude::*;
 use ethers::contract::abigen;
 use std::sync::Arc;
-use serde::Deserialize;
-use std::fs;
 
 abigen!(
     IUniswapV2Factory,
@@ -26,18 +24,18 @@ pub fn known_dexes() -> Vec<DexDef> {
     vec![
         DexDef {
             name: "quickswap",
-            factory: addr("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff"), // Amoy Quickswap factory
-            router: addr("0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"),
+            factory: addr("0x5757371414417b8C6CAad45bAeF941aBc7d3Ab32"),
+            router: addr("0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff"),
         },
         DexDef {
             name: "sushiswap",
-            factory: addr("0xc35DADB65012eC5796536bD9864eD8773aBc74C4"), // Amoy Sushiswap factory
+            factory: addr("0xc35DADB65012eC5796536bD9864eD8773aBc74C4"),
             router: addr("0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506"),
         },
     ]
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TokenPairDef {
     pub label: String,
     pub token0: Address,
@@ -45,30 +43,13 @@ pub struct TokenPairDef {
 }
 
 pub fn token_pairs() -> Vec<TokenPairDef> {
-    let chain_id: u64 = std::env::var("CHAIN_ID")
-        .unwrap_or_else(|_| "80002".into())
-        .parse()
-        .unwrap_or(80002);
-
-    // Amoy testnet addresses
-    if chain_id == 80002 {
-        vec![
-            TokenPairDef {
-                label: "USDC/WMATIC".to_string(),
-                token0: addr("0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582"),
-                token1: addr("0x360ad4f9a9A8EFe9A8DCB5f461c4Cc1047E1Dcf9"),
-            },
-        ]
-    } else {
-        // Polygon mainnet fallback
-        vec![
-            TokenPairDef {
-                label: "USDC/WETH".to_string(),
-                token0: addr("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"),
-                token1: addr("0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"),
-            },
-        ]
-    }
+    vec![
+        TokenPairDef {
+            label: "USDC/WETH".to_string(),
+            token0: addr("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"),
+            token1: addr("0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"),
+        },
+    ]
 }
 
 pub async fn resolve_all_pools<M: Middleware + 'static>(
