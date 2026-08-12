@@ -87,7 +87,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &dex_registry::token_pairs(),
     )
     .await;
-    let scanner = RwLock::new(Scanner::new(read_provider.clone(), pairs, 6, 18));
+
+    // ===== FIX: Wrap scanner in Arc =====
+    let scanner = Arc::new(RwLock::new(Scanner::new(
+        read_provider.clone(),
+        pairs,
+        6,
+        18,
+    )));
 
     let app_state = Arc::new(api::AppState { health: true });
     let db_clone = db.clone();
@@ -175,12 +182,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let max_trade_check = max_trade;
         let wallet_balance_check = wallet_balance_usd;
 
-        // ===== FIX: async move to capture owned values =====
-        let spread_check = || {
+        // ===== FIX: use Arc to share the scanner across calls =====
+        let scanner_clone = scanner.clone();
+        let spread_check = move || {
+            let scanner_clone = scanner_clone.clone();
             let pair_label = pair_label.clone();
             let cost_model_check = cost_model_check.clone();
             async move {
-                let mut scan = scanner.write().await;
+                let mut scan = scanner_clone.write().await;
                 match scan.quick_check(&pair_label).await {
                     Some(opp) => {
                         let decision = size_and_evaluate(
@@ -196,7 +205,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         };
-        // ===============================================
+        // ===================================================
 
         let results;
         {
@@ -214,10 +223,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let net = r.realized_profit_usdc - r.gas_cost_usd;
                     risk.record_result(net, r.gas_cost_usd);
                     gas.spend_gas(r.gas_cost_usd);
-                    // ===== FIX: split borrow =====
                     let to_reinvest = gas.calculate_gas_to_reinvest(net);
                     gas.add_gas(to_reinvest);
-                    // ===========================
                     info!(pair = %best.label, net, tx = %r.tx_hash, "trade executed");
                     log_trade(&db, best, Some(sized.size_usd), r.gas_cost_usd, "executed", None).await;
                 }
