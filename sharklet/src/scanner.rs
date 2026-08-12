@@ -1,8 +1,8 @@
 // src/scanner.rs
 //
-// High-frequency arbitrage scanner. Fetches pool reserves in parallel,
-// caches them briefly, and validates the best spreads against actual
-// router quotes (round-trip) before emitting an Opportunity.
+// High-frequency arbitrage scanner. Fetches pool reserves, caches them
+// briefly, and validates the best spreads against actual router quotes
+// (round-trip) before emitting an Opportunity.
 
 use ethers::prelude::*;
 use ethers::contract::abigen;
@@ -144,6 +144,19 @@ impl<M: Middleware + 'static> Scanner<M> {
         }
     }
 
+    /// Fetch every pool for a pair, one at a time (sequential, not
+    /// concurrent — fetch_pool needs &mut self so we can't hold multiple
+    /// in-flight futures against it at once).
+    async fn fetch_all_pools(&mut self, pair: &TrackedPair) -> Vec<PoolQuote> {
+        let mut quotes = Vec::new();
+        for (dex_name, addr) in &pair.pools {
+            if let Some(q) = self.fetch_pool(dex_name, *addr).await {
+                quotes.push(q);
+            }
+        }
+        quotes
+    }
+
     fn implied_price(&self, q: &PoolQuote) -> f64 {
         let r0 = q.reserve_token0 as f64 / 10f64.powi(self.token0_decimals as i32);
         let r1 = q.reserve_token1 as f64 / 10f64.powi(self.token1_decimals as i32);
@@ -172,21 +185,13 @@ impl<M: Middleware + 'static> Scanner<M> {
         let block_number = self.provider.get_block_number().await.ok().map(|n| n.as_u64());
         let mut raw = Vec::new();
 
-        for pair in &self.pairs {
+        let pairs = self.pairs.clone();
+        for pair in &pairs {
             if pair.pools.len() < 2 {
                 continue;
             }
 
-            let mut futures = Vec::new();
-            for (dex_name, addr) in &pair.pools {
-                futures.push(self.fetch_pool(dex_name, *addr));
-            }
-            let quotes: Vec<PoolQuote> = futures::future::join_all(futures)
-                .await
-                .into_iter()
-                .filter_map(|q| q)
-                .collect();
-
+            let quotes = self.fetch_all_pools(pair).await;
             if quotes.len() < 2 {
                 continue;
             }
@@ -225,7 +230,7 @@ impl<M: Middleware + 'static> Scanner<M> {
         }
 
         raw.sort_by(|a, b| b.spread_pct.partial_cmp(&a.spread_pct).unwrap());
-        let top = raw.into_iter().take(5);
+        let top: Vec<Opportunity> = raw.into_iter().take(5).collect();
         let mut validated = Vec::new();
 
         for opp in top {
@@ -270,16 +275,7 @@ impl<M: Middleware + 'static> Scanner<M> {
             return None;
         }
 
-        let mut futures = Vec::new();
-        for (dex_name, addr) in &pair.pools {
-            futures.push(self.fetch_pool(dex_name, *addr));
-        }
-        let quotes: Vec<PoolQuote> = futures::future::join_all(futures)
-            .await
-            .into_iter()
-            .filter_map(|q| q)
-            .collect();
-
+        let quotes = self.fetch_all_pools(&pair).await;
         if quotes.len() < 2 {
             return None;
         }
