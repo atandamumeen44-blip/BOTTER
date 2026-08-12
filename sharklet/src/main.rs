@@ -169,14 +169,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let gas_price_usd_per_gas = matic_usd / 1e9;
 
         // ── Reswap: after each shot, re-check this exact pair fresh and
-        // re-run the same profit math before firing again. Stops the moment
-        // the opportunity is gone instead of burning gas on stale trades.
+        // re-run the same profit math before firing again.
         let pair_label = best.label.clone();
         let cost_model_check = cost_model.clone();
         let max_trade_check = max_trade;
         let wallet_balance_check = wallet_balance_usd;
 
-        // ===== FIX: use async move to capture owned values =====
+        // ===== FIX: async move to capture owned values =====
         let spread_check = || {
             let pair_label = pair_label.clone();
             let cost_model_check = cost_model_check.clone();
@@ -197,7 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         };
-        // ===================================================
+        // ===============================================
 
         let results;
         {
@@ -215,10 +214,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let net = r.realized_profit_usdc - r.gas_cost_usd;
                     risk.record_result(net, r.gas_cost_usd);
                     gas.spend_gas(r.gas_cost_usd);
-                    // ===== FIX: split the borrow =====
+                    // ===== FIX: split borrow =====
                     let to_reinvest = gas.calculate_gas_to_reinvest(net);
                     gas.add_gas(to_reinvest);
-                    // ==============================
+                    // ===========================
                     info!(pair = %best.label, net, tx = %r.tx_hash, "trade executed");
                     log_trade(&db, best, Some(sized.size_usd), r.gas_cost_usd, "executed", None).await;
                 }
