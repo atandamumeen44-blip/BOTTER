@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY . .
 
+# Force cache bust – ensures Railway uses the latest code
+RUN echo "Build timestamp: $(date)"
+
 RUN cargo build --release 2>&1 | tee /tmp/build.log; \
     test -f target/release/sharklet || (echo "BUILD FAILED - dumping log" && cat /tmp/build.log && exit 1)
 
