@@ -1,3 +1,5 @@
+<!-- 🚀 Railway rebuild trigger: fixed price feed, updated dashboard, simulation mode active -->
+
 # 🦈 Sharklet v2
 
 AI-powered cross-chain flash loan arbitrage bot.
