@@ -9,7 +9,7 @@ use ethers::contract::abigen;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::timeout as tokio_timeout;
-use tracing::{debug, warn};
+use tracing::{debug, warn, info};
 
 abigen!(
     IUniswapV2Pair,
@@ -110,7 +110,8 @@ impl<M: Middleware + 'static> Scanner<M> {
             }
         }
 
-        let timeout_dur = Duration::from_secs(2);
+        // ✅ FIXED: Increased timeout from 2s to 5s to reduce RPC timeouts
+        let timeout_dur = Duration::from_secs(5);
         let pool = IUniswapV2Pair::new(pool_addr, self.provider.clone());
 
         let fetch_future = async {
