@@ -1,8 +1,6 @@
 use ethers::prelude::*;
 use ethers::contract::abigen;
 use std::sync::Arc;
-use serde::Deserialize;
-use std::fs;
 
 abigen!(
     IUniswapV2Factory,
@@ -59,7 +57,7 @@ pub fn known_dexes() -> Vec<DexDef> {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TokenPairDef {
     pub label: String,
     pub token0: Address,
