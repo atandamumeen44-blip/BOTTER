@@ -183,6 +183,9 @@ impl<M: Middleware + 'static> Scanner<M> {
 
     /// Scan all pairs, filter by spread, validate top candidates with routers.
     pub async fn scan(&mut self) -> Vec<Opportunity> {
+        // 🔥 HEARTBEAT LOG – shows scanner is active
+        info!("🔄 Scanning for arbitrage opportunities...");
+
         let block_number = self.provider.get_block_number().await.ok().map(|n| n.as_u64());
         let mut raw = Vec::new();
 
@@ -193,6 +196,9 @@ impl<M: Middleware + 'static> Scanner<M> {
             }
 
             let quotes = self.fetch_all_pools(pair).await;
+            // Log how many pools we got for this pair
+            info!("📊 Pair: {} – fetched {} pools", pair.label, quotes.len());
+
             if quotes.len() < 2 {
                 continue;
             }
@@ -211,8 +217,18 @@ impl<M: Middleware + 'static> Scanner<M> {
                     };
                     let spread_pct = (exp_price - cheap_price) / cheap_price * 100.0;
                     if spread_pct < self.min_spread_pct {
+                        // Log skipped spreads (so you know it's checking)
+                        debug!(
+                            "⏬ Spread {:.3}% below min ({:.2}%) – skipping",
+                            spread_pct, self.min_spread_pct
+                        );
                         continue;
                     }
+                    // Log when we find a spread above threshold
+                    info!(
+                        "📈 Spread {:.3}% found between {} and {} – validating...",
+                        spread_pct, cheap.dex_name, expensive.dex_name
+                    );
                     raw.push(Opportunity {
                         label: pair.label.clone(),
                         buy_dex: cheap.dex_name.clone(),
@@ -261,6 +277,12 @@ impl<M: Middleware + 'static> Scanner<M> {
             }
 
             validated.push(opp);
+        }
+
+        if validated.is_empty() {
+            info!("✅ No profitable opportunities found this scan.");
+        } else {
+            info!("🎯 Found {} profitable opportunities!", validated.len());
         }
 
         validated
