@@ -42,8 +42,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .split(',')
         .map(|s| s.trim().to_string())
         .collect();
-    let contract_address: Address = std::env::var("CONTRACT_ADDRESS").expect("CONTRACT_ADDRESS").parse()?;
-    let chain_id: u64 = std::env::var("CHAIN_ID").unwrap_or_else(|_| "137".into()).parse()?;
+    let contract_address: Address = std::env::var("CONTRACT_ADDRESS")
+        .expect("CONTRACT_ADDRESS")
+        .parse()?;
+    let chain_id: u64 = std::env::var("CHAIN_ID")
+        .unwrap_or_else(|_| "137".into())
+        .parse()?;
     let wallet: LocalWallet = private_key.parse::<LocalWallet>()?.with_chain_id(chain_id);
 
     let rpc_manager = Arc::new(RpcManager::new(rpc_urls)?);
@@ -78,8 +82,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gas_manager = GasManager::new(wallet.address(), read_provider.clone());
     let gas_manager = RwLock::new(gas_manager);
 
-    let oracle = Arc::new(price_oracle::PriceOracle::from_chain_config(read_provider.clone(), chain_id));
-    let fallback_price = std::env::var("MATIC_USD_PRICE_HINT").ok().and_then(|s| s.parse().ok()).unwrap_or(0.60);
+    let oracle = Arc::new(price_oracle::PriceOracle::from_chain_config(
+        read_provider.clone(),
+        chain_id,
+    ));
+    let fallback_price = std::env::var("MATIC_USD_PRICE_HINT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0.60);
 
     let pairs = dex_registry::resolve_all_pools(
         read_provider.clone(),
@@ -88,7 +98,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await;
 
-    // ===== FIX: Wrap scanner in Arc =====
     let scanner = Arc::new(RwLock::new(Scanner::new(
         read_provider.clone(),
         pairs,
@@ -108,20 +117,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             wallet_balance_usd = gas.update_balance(matic_usd).await;
         }
 
+        // ===== SCAN =====
         let opportunities;
         {
             let mut scan = scanner.write().await;
             opportunities = scan.scan().await;
         }
+
+        // ===== HEARTBEAT FIX – ADDED LOG =====
         if opportunities.is_empty() {
+            info!("scan cycle complete — no opportunities found");
             sleep(Duration::from_millis(2000)).await;
             continue;
         }
+
+        // ===== We have at least one opportunity =====
         let best = &opportunities[0];
 
         let gas_price_wei = read_provider.get_gas_price().await.unwrap_or_default();
         let rough = U256::from(1000 * 1e6 as u128);
-        let gas_units = executor.read().await.estimate_gas(rough).await.map(|g| g.as_u128()).unwrap_or(300_000);
+        let gas_units = executor
+            .read()
+            .await
+            .estimate_gas(rough)
+            .await
+            .map(|g| g.as_u128())
+            .unwrap_or(300_000);
         let gas_cost_matic = (gas_price_wei.as_u128() * gas_units) as f64 / 1e18;
         let live_gas_cost_usd = gas_cost_matic * matic_usd;
 
@@ -131,7 +152,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             safety_margin_usd: 0.30,
         };
         let max_trade = risk_engine.read().await.limits.max_trade_size_usd;
-        let decision = size_and_evaluate(best, &cost_model, max_trade, wallet_balance_usd, &default_tiers());
+        let decision = size_and_evaluate(
+            best,
+            &cost_model,
+            max_trade,
+            wallet_balance_usd,
+            &default_tiers(),
+        );
 
         let sized = match decision {
             ProfitDecision::Go(s) => s,
@@ -143,12 +170,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-        let rpc_confidence = rpc_manager.scoreboard().await.iter().map(|s| s.success_rate).fold(0.0, f64::max);
+        let rpc_confidence = rpc_manager
+            .scoreboard()
+            .await
+            .iter()
+            .map(|s| s.success_rate)
+            .fold(0.0, f64::max);
         let mut risk = risk_engine.write().await;
-        match risk.evaluate(sized.size_usd, sized.size_usd, wallet_balance_usd, rpc_confidence) {
+        match risk.evaluate(
+            sized.size_usd,
+            sized.size_usd,
+            wallet_balance_usd,
+            rpc_confidence,
+        ) {
             RiskDecision::Reject(reason) => {
                 warn!(pair = %best.label, reason, "risk engine rejected");
-                log_trade(&db, best, Some(sized.size_usd), live_gas_cost_usd, "rejected", Some(&reason)).await;
+                log_trade(&db, best, Some(sized.size_usd), live_gas_cost_usd, "rejected", Some(&reason))
+                    .await;
                 sleep(Duration::from_millis(500)).await;
                 continue;
             }
@@ -167,7 +205,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if !sim_report.passed {
             warn!(pair = %best.label, "simulation rejected");
-            log_trade(&db, best, Some(sized.size_usd), live_gas_cost_usd, "sim_rejected", Some("sim")).await;
+            log_trade(
+                &db,
+                best,
+                Some(sized.size_usd),
+                live_gas_cost_usd,
+                "sim_rejected",
+                Some("sim"),
+            )
+            .await;
             sleep(Duration::from_millis(500)).await;
             continue;
         }
@@ -175,14 +221,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let amount = U256::from((sized.size_usd * 1e6) as u128);
         let gas_price_usd_per_gas = matic_usd / 1e9;
 
-        // ── Reswap: after each shot, re-check this exact pair fresh and
-        // re-run the same profit math before firing again.
+        // ── Reswap closure ──
         let pair_label = best.label.clone();
         let cost_model_check = cost_model.clone();
         let max_trade_check = max_trade;
         let wallet_balance_check = wallet_balance_usd;
 
-        // ===== FIX: use Arc to share the scanner across calls =====
         let scanner_clone = scanner.clone();
         let spread_check = move || {
             let scanner_clone = scanner_clone.clone();
@@ -205,13 +249,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         };
-        // ===================================================
 
         let results;
         {
             let mut exec = executor.write().await;
             results = exec
-                .execute_loop(amount, 20, gas_price_usd_per_gas, Some(1000.0), Some(100.0), spread_check)
+                .execute_loop(
+                    amount,
+                    20,
+                    gas_price_usd_per_gas,
+                    Some(1000.0),
+                    Some(100.0),
+                    spread_check,
+                )
                 .await;
         }
 
@@ -226,13 +276,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     let to_reinvest = gas.calculate_gas_to_reinvest(net);
                     gas.add_gas(to_reinvest);
                     info!(pair = %best.label, net, tx = %r.tx_hash, "trade executed");
-                    log_trade(&db, best, Some(sized.size_usd), r.gas_cost_usd, "executed", None).await;
+                    log_trade(
+                        &db,
+                        best,
+                        Some(sized.size_usd),
+                        r.gas_cost_usd,
+                        "executed",
+                        None,
+                    )
+                    .await;
                 }
                 Err(e) => {
                     risk.record_result(-live_gas_cost_usd, live_gas_cost_usd);
                     gas.spend_gas(live_gas_cost_usd);
                     error!(pair = %best.label, error = %e, "execution failed");
-                    log_trade(&db, best, Some(sized.size_usd), live_gas_cost_usd, "failed", Some("execution error")).await;
+                    log_trade(
+                        &db,
+                        best,
+                        Some(sized.size_usd),
+                        live_gas_cost_usd,
+                        "failed",
+                        Some("execution error"),
+                    )
+                    .await;
                 }
             }
         }
